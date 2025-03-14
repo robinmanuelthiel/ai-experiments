@@ -1,16 +1,19 @@
 import os
+import asyncio
 from typing import Any
-import autogen
 import agentops
-from autogen import AssistantAgent, UserProxyAgent, ConversableAgent, config_list_from_json, register_function
-import autogen.runtime_logging
 import sqlite3
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.ui import Console
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_agentchat.teams import RoundRobinGroupChat
+from autogen_agentchat.conditions import TextMentionTermination, MaxMessageTermination
 
 # Start tracing
-agentops.init(api_key=os.environ.get("AGENTOPS_API_KEY"), tags=["simple-autogen-example"])
+# agentops.init(api_key=os.environ.get("AGENTOPS_API_KEY"), tags=["simple-autogen-example"])
 
 # Init database connection
-connection = sqlite3.connect("demo.db")
+connection = sqlite3.connect("demo.db", check_same_thread=False)
 
 # Seeding
 # cursor = connection.cursor()
@@ -55,43 +58,21 @@ def run_query(sql: str) -> list[Any]:
   return result.fetchall()
 
 # Let's first define the assistant agent that suggests tool calls.
-assistant = ConversableAgent(
+agent = AssistantAgent(
     name="Assistant",
-    system_message="You are a helpful AI assistant. "
-    "You can help with simple questions about the dataset. "
-    "Return 'TERMINATE' when the task is done.",
-    llm_config={"config_list": [{"model": "gpt-4", "api_key": os.environ["OPENAI_API_KEY"]}]},
+    system_message="You are a helpful AI assistant. You can help with simple questions about the dataset. Return 'TERMINATE' when the task is done.",
+    model_client=OpenAIChatCompletionClient(model="gpt-4o"),
+    tools=[get_tables, run_query],
 )
 
-# The user proxy agent is used for interacting with the assistant agent
-# and executes tool calls.
-user_proxy = ConversableAgent(
-    name="User",
-    llm_config=False,
-    is_termination_msg=lambda msg: msg.get("content") is not None and "TERMINATE" in msg["content"],
-    human_input_mode="NEVER",
-)
+# Run the agent and stream the messages to the console.
+async def main() -> None:
+    termination = TextMentionTermination("TERMINATE") | MaxMessageTermination(10)
+    group_chat = RoundRobinGroupChat([agent], termination_condition=termination)
+    stream = group_chat.run_stream(task="How many users are from Germany?")
+    await Console(stream)
+    # Stop tracing
+    # agentops.end_session("Success")
 
-# Register the functions to the two agents.
-register_function(
-    get_tables,
-    caller=assistant,  # The assistant agent can suggest calls to the calculator.
-    executor=user_proxy,  # The user proxy agent can execute the calculator calls.
-    name="get_tables",  # Executes the given SQL query and returns a list of results.
-    description="Returns the list of tables in the database.",  # A description of the tool.
-)
-
-register_function(
-    run_query,
-    caller=assistant,  # The assistant agent can suggest calls to the calculator.
-    executor=user_proxy,  # The user proxy agent can execute the calculator calls.
-    name="run_query",  # Executes the given SQL query and returns a list of results.
-    description="Executes the given SQL query and returns a list of results.",  # A description of the tool.
-)
-
-# chat_result = user_proxy.initiate_chat(assistant, message="How many users exist in our dataset?")
-chat_result = user_proxy.initiate_chat(assistant, message="How many users are from Germany?")
-print(chat_result)
-
-# Stop tracing
-agentops.end_session("Success")
+# NOTE: if running this inside a Python script you'll need to use asyncio.run(main()).
+asyncio.run(main())

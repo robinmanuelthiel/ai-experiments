@@ -1,32 +1,47 @@
 import os
-import autogen
+import asyncio
 import agentops
-from autogen import AssistantAgent, UserProxyAgent, ConversableAgent, config_list_from_json
-import autogen.runtime_logging
+from autogen_agentchat.agents import AssistantAgent
+from autogen_agentchat.ui import Console
+from autogen_ext.models.openai import OpenAIChatCompletionClient
+from autogen_agentchat.teams import RoundRobinGroupChat
 
-# Start logging with logger_type and the filename to log to
-logging_session_id = autogen.runtime_logging.start(logger_type="sqlite", config={"dbname": "logs.db"})
-print("Logging session ID: " + str(logging_session_id))
+async def main() -> None:
+  openai_model_client = OpenAIChatCompletionClient(
+      model="gpt-4o",
+  )
 
-agentops.init(api_key=os.environ.get("AGENTOPS_API_KEY"), tags=["simple-autogen-example"])
-# agentops.start_session(tags=["autogen-tool-example"])
+  # ollama_model_client = OpenAIChatCompletionClient(
+  #     model="phi3",
+  #     base_url="http://127.0.0.1:11434/v1",
+  # )
 
-cathy = ConversableAgent(
-    "cathy",
-    system_message="Your name is Cathy and you are a part of a duo of comedians.",
-    llm_config={"config_list": [{"model": "gpt-4", "temperature": 0.9, "api_key": os.environ.get("OPENAI_API_KEY")}]},
-    human_input_mode="NEVER",  # Never ask for human input.
-)
+  # Start logging with logger_type and the filename to log to
+  # logging_session_id = autogen.runtime_logging.start(logger_type="sqlite", config={"dbname": "logs.db"})
+  # print("Logging session ID: " + str(logging_session_id))
 
-joe = ConversableAgent(
-    "joe",
-    system_message="Your name is Joe and you are a part of a duo of comedians.",
-    llm_config={"config_list": [{"model": "gpt-4", "temperature": 0.7, "api_key": os.environ.get("OPENAI_API_KEY")}]}, # Use OpenAI's GPT-4 model
-    #llm_config={"config_list": [{"model": "phi3", "temperature": 0.7, "base_url": "http://127.0.0.1:11434/v1"}]}, # Use a local ollama model
-    human_input_mode="NEVER",  # Never ask for human input.
-)
+  # agentops.init(api_key=os.environ.get("AGENTOPS_API_KEY"), tags=["simple-autogen-example"])
+  # agentops.start_session(tags=["autogen-tool-example"])
 
-result = joe.initiate_chat(cathy, message="Cathy, tell me a joke.", max_turns=2)
+  cathy = AssistantAgent(
+      name="cathy",
+      system_message="Your name is Cathy and you are a part of a duo of comedians.",
+      model_client=openai_model_client
+  )
 
-agentops.end_session("Success")
-autogen.runtime_logging.stop()
+  joe = AssistantAgent(
+      name="joe",
+      system_message="Your name is Joe and you are a part of a duo of comedians.",
+      model_client=openai_model_client
+  )
+
+  group_chat = RoundRobinGroupChat([cathy, joe], max_turns=4)
+  stream = group_chat.run_stream(task="Cathy, tell me a joke.")
+  await Console(stream)
+
+  # agentops.end_session("Success")
+  # autogen.runtime_logging.stop()
+
+
+asyncio.run(main())
+
