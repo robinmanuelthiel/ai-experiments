@@ -1,7 +1,11 @@
+import asyncio
+import os
 from sys import api_version
 from openai import AsyncAzureOpenAI
 from agents import Agent, Runner, enable_verbose_stdout_logging, AsyncOpenAI, OpenAIChatCompletionsModel, set_default_openai_client
-import asyncio
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from agents.tracing.processors import ConsoleSpanExporter, BatchTraceProcessor
 
@@ -12,7 +16,7 @@ console_processor = BatchTraceProcessor(exporter=console_exporter)
 
 # Create OpenAI client using Azure OpenAI
 openai_client = AsyncAzureOpenAI(
-    api_key="3PWJdtWMOShZMA82XHhkmf13aA0GOLKJHJ1hwltiMnH7Yazf6lnOJQQJ99ALACHYHv6XJ3w3AAAAACOGDGEE",
+    api_key=os.getenv("AZURE_OPENAI_API_KEY", ""),
     api_version="2024-08-01-preview",
     azure_endpoint="https://rothie-eastus2-ai-services.openai.azure.com/",
     azure_deployment="gpt-4o"
