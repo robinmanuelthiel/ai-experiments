@@ -29,7 +29,7 @@ async def main():
     agent = Agent(
         task=(
             "Open LinkedIn. "
-            "Search for Bill Gates. Send him a message. Ask the user for the message content. "
+            "Search for Satya Nadella. Send him a message. Ask the user for the message content. "
         ),
         browser=browser,
         llm=ChatOpenAI(model="gpt-4.1"),
